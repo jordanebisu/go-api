@@ -14,11 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Below is our data model
+// Below is the data model
 type Person struct {
 	ID        primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
 	Firstname string             `json:"firstname,omitempty" bson:"firstname,omitempty"`
 	Lastname  string             `json:"lastname,omitempty" bson:"lastname,omitempty"`
+	Email     string             `json:"email,omitempty" bson:"email,omitempty"`
 }
 
 var client *mongo.Client
@@ -32,7 +33,23 @@ func CreatePersonEndpoint(response http.ResponseWriter, request *http.Request) {
 	result, _ := collection.InsertOne(ctx, person)
 	json.NewEncoder(response).Encode(result)
 }
-
+func EditPersonEndpoint(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("content-type", "application/json")
+	params := mux.Vars(request)
+	id, _ := primitive.ObjectIDFromHex(params["id"])
+	filter := bson.D{{"_id", id}}
+	var person Person
+	_ = json.NewDecoder(request.Body).Decode(&person)
+	collection := client.Database("mygoapi").Collection("people")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	result, err := collection.ReplaceOne(ctx, filter, person)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		response.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	json.NewEncoder(response).Encode(result)
+}
 func GetPeopleEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("content-type", "application/json")
 	var people []Person
@@ -82,5 +99,9 @@ func main() {
 	router.HandleFunc("/person", CreatePersonEndpoint).Methods("POST")
 	router.HandleFunc("/people", GetPeopleEndpoint).Methods("GET")
 	router.HandleFunc("/person/{id}", GetPersonEndpoint).Methods("GET")
+	// delete if not needed
+	router.HandleFunc("/person/{id}", EditPersonEndpoint).Methods("POST")
+	// delete if not needed
+	fmt.Println("Application is now running on port 12345")
 	http.ListenAndServe(":12345", router)
 }
